@@ -1,6 +1,7 @@
 use rug::Integer;
 use scicrypt_numbertheory::gen_rsa_modulus;
 use scicrypt_traits::cryptosystems::AsymmetricCryptosystem;
+use scicrypt_traits::cryptosystems::SignatureScheme;
 use scicrypt_traits::randomness::GeneralRng;
 use scicrypt_traits::randomness::SecureRng;
 use scicrypt_traits::security::BitsOfSecurity;
@@ -30,6 +31,17 @@ pub struct RichRSACiphertext<'pk> {
     public_key: &'pk RSAPublicKey,
 }
 
+/// RSA Signature
+pub struct RSASignature {
+    s: Integer,
+}
+
+// Rich representation of an RSA signature with the associated public key.
+pub struct RichRSASignature<'pk> {
+    signature: RSASignature,
+    public_key: &'pk RSAPublicKey,
+}
+
 impl<'pk> Enrichable<'pk, RSAPublicKey, RichRSACiphertext<'pk>> for RSACiphertext {
     fn enrich(self, public_key: &RSAPublicKey) -> RichRSACiphertext
     where
@@ -37,6 +49,18 @@ impl<'pk> Enrichable<'pk, RSAPublicKey, RichRSACiphertext<'pk>> for RSACiphertex
     {
         RichRSACiphertext {
             ciphertext: self,
+            public_key,
+        }
+    }
+}
+
+impl<'pk> Enrichable<'pk, RSAPublicKey, RichRSASignature<'pk>> for RSASignature {
+    fn enrich(self, public_key: &RSAPublicKey) -> RichRSASignature
+    where
+        Self: Sized,
+    {
+        RichRSASignature {
+            signature: self,
             public_key,
         }
     }
@@ -115,12 +139,46 @@ impl<'pk> RichRSACiphertext<'pk> {
     }
 }
 
+impl SignatureScheme<'_> for RSA {
+    type Plaintext = Integer;
+    type Signature = RSASignature;
+    type RichSignature<'pk> = RichRSASignature<'pk>;
+
+    type PublicKey = RSAPublicKey;
+    type SecretKey = Integer;
+
+    fn sign<'p>(
+        plaintext: &Self::Plaintext,
+        secret_key: &Self::SecretKey,
+        public_key: &Self::PublicKey,
+    ) -> Self::Signature {
+        RSASignature {
+            s: Integer::from(plaintext.pow_mod_ref(&secret_key, &public_key.n).unwrap()),
+        }
+    }
+    fn verify<'p>(signature: &Self::RichSignature<'p>, plaintext: &Self::Plaintext) -> bool {
+        // think about hashing message first instead of direct operations on the message.
+        let message: &Integer = &Integer::from(
+            signature
+                .signature
+                .s
+                .pow_mod_ref(&signature.public_key.e, &signature.public_key.n)
+                .unwrap(),
+        );
+        if message == plaintext {
+            return true;
+        }
+        return false;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::cryptosystems::rsa::RSA;
     use rand_core::OsRng;
     use rug::Integer;
     use scicrypt_traits::cryptosystems::AsymmetricCryptosystem;
+    use scicrypt_traits::cryptosystems::SignatureScheme;
     use scicrypt_traits::randomness::GeneralRng;
     use scicrypt_traits::security::BitsOfSecurity;
     use scicrypt_traits::Enrichable;
@@ -161,5 +219,27 @@ mod tests {
         let ciphertext_twice = ciphertext.pow(&Integer::from(4));
 
         assert_eq!(Integer::from(6561), RSA::decrypt(&ciphertext_twice, &sk));
+    }
+
+    #[test]
+    fn test_signature_verification() {
+        let mut rng = GeneralRng::new(OsRng);
+        let (pk, sk) = RSA::generate_keys(&BitsOfSecurity::Other { pk_bits: 160 }, &mut rng);
+
+        let signature = RSA::sign(&Integer::from(10), &sk, &pk).enrich(&pk);
+
+        let verification = RSA::verify(&signature, &Integer::from(10));
+        assert_eq!(verification, true);
+    }
+
+    #[test]
+    fn test_signature_verification_incorrect() {
+        let mut rng = GeneralRng::new(OsRng);
+        let (pk, sk) = RSA::generate_keys(&BitsOfSecurity::Other { pk_bits: 160 }, &mut rng);
+
+        let signature = RSA::sign(&Integer::from(10), &sk, &pk).enrich(&pk);
+
+        let verification = RSA::verify(&signature, &Integer::from(11));
+        assert_eq!(verification, false);
     }
 }

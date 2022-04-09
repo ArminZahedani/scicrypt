@@ -44,3 +44,31 @@ pub trait AsymmetricCryptosystem<'pk> {
         secret_key: &Self::SecretKey,
     ) -> Self::Plaintext;
 }
+
+// A Signature Scheme is a cryptosystem that implements signing and verification functionality.
+// Only the owner of the private key can create a valid signature on a message, while anyone with the public key
+// can verify the signature
+pub trait SignatureScheme<'pk> {
+    /// The type of the plaintexts to be signed.
+    type Plaintext;
+    /// The type of the signatures.
+    type Signature: Enrichable<'pk, Self::PublicKey, Self::RichSignature<'pk>>;
+    /// Rich representation of a signature that associates it with the corresponding public key.
+    /// Allows performing easy verification of the signature with the associated public key.
+    type RichSignature<'p>;
+
+    /// The type of the verification key.
+    type PublicKey;
+    /// The type of the signing key.
+    type SecretKey;
+
+    // Sign the plaintext using the secret key.
+    fn sign<'p>(
+        plaintext: &Self::Plaintext,
+        secret_key: &Self::SecretKey,
+        public_key: &Self::PublicKey,
+    ) -> Self::Signature;
+
+    // Verify a signature on a message using the public key of the signature
+    fn verify<'p>(signature: &Self::RichSignature<'p>, plaintext: &Self::Plaintext) -> bool;
+}
