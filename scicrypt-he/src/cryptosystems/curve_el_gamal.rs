@@ -8,6 +8,7 @@ use scicrypt_traits::randomness::SecureRng;
 use scicrypt_traits::security::BitsOfSecurity;
 use scicrypt_traits::Enrichable;
 use std::ops::{Add, Mul};
+use serde::{Serialize, Deserialize};
 
 /// ElGamal over the Ristretto-encoded Curve25519 elliptic curve. The curve is provided by the
 /// `curve25519-dalek` crate. ElGamal is a partially homomorphic cryptosystem.
@@ -15,7 +16,7 @@ pub struct CurveElGamal;
 
 /// ElGamal ciphertext containing curve points. The addition operator on the ciphertext is
 /// reflected as the curve operation on the associated plaintext.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct CurveElGamalCiphertext {
     pub(crate) c1: RistrettoPoint,
     pub(crate) c2: RistrettoPoint,

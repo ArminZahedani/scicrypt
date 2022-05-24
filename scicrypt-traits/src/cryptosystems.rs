@@ -2,6 +2,7 @@ use crate::randomness::GeneralRng;
 use crate::randomness::SecureRng;
 use crate::security::BitsOfSecurity;
 use crate::Enrichable;
+use rug::Integer;
 
 /// An asymmetric cryptosystem is a system of methods to encrypt plaintexts into ciphertexts, and
 /// decrypt those ciphertexts back into plaintexts. Anyone who has access to the public key can
@@ -45,9 +46,9 @@ pub trait AsymmetricCryptosystem<'pk> {
     ) -> Self::Plaintext;
 }
 
-// A Signature Scheme is a cryptosystem that implements signing and verification functionality.
-// Only the owner of the private key can create a valid signature on a message, while anyone with the public key
-// can verify the signature
+/// A Signature Scheme is a cryptosystem that implements signing and verification functionality.
+/// Only the owner of the private key can create a valid signature on a message, while anyone with the public key
+/// can verify the signature
 pub trait SignatureScheme<'pk> {
     /// The type of the plaintexts to be signed.
     type Plaintext;
@@ -62,13 +63,36 @@ pub trait SignatureScheme<'pk> {
     /// The type of the signing key.
     type SecretKey;
 
-    // Sign the plaintext using the secret key.
+    /// Sign the plaintext using the secret key.
     fn sign<'p>(
         plaintext: &Self::Plaintext,
         secret_key: &Self::SecretKey,
         public_key: &Self::PublicKey,
     ) -> Self::Signature;
 
-    // Verify a signature on a message using the public key of the signature
+    /// Verify a signature on a message using the public key of the signature
     fn verify<'p>(signature: &Self::RichSignature<'p>, plaintext: &Self::Plaintext) -> bool;
+}
+
+/// A trait to encrypt using own supplied randomness
+pub trait EncryptRaw<'pk> {
+    /// The type of the plaintexts to be encrypted.
+    type Plaintext;
+    /// The type of the encrypted plaintexts.
+    type Ciphertext: Enrichable<'pk, Self::PublicKey, Self::RichCiphertext<'pk>>;
+    /// Rich representation of a ciphertext that associates it with the corresponding public key.
+    /// This allows for performing homomorphic operations using operator overloading, among others.
+    type RichCiphertext<'p>;
+
+    /// The type of the encryption key.
+    type PublicKey;
+    /// The type of the decryption key.
+    type SecretKey;
+
+    /// Method to encrypt paillier with own randomness
+    fn encrypt_raw(
+        plaintext: &Self::Plaintext,
+        public_key: &Self::PublicKey,
+        r: Integer,
+    ) -> Self::Ciphertext;
 }

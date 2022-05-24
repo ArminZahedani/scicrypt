@@ -7,19 +7,25 @@ use scicrypt_traits::randomness::SecureRng;
 use scicrypt_traits::security::BitsOfSecurity;
 use scicrypt_traits::Enrichable;
 use std::ops::{Mul, Rem};
+use serde::{Serialize, Deserialize};
 
 /// The RSA cryptosystem.
 pub struct RSA;
 
 /// Public key for the RSA cryptosystem.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Hash)]
 pub struct RSAPublicKey {
-    n: Integer,
+    /// Public modulus n as Integer
+    pub n: Integer,
+
+    /// Exponentation factor as Integer
     e: Integer,
 }
 
 /// Ciphertext of the Paillier cryptosystem, which is multiplicatively homomorphic.
 pub struct RSACiphertext {
-    c: Integer,
+    /// Raw ciphertext in integer form
+    pub c: Integer,
 }
 
 /// A struct holding both a ciphertext and a reference to its associated public key, which is
@@ -32,11 +38,13 @@ pub struct RichRSACiphertext<'pk> {
 }
 
 /// RSA Signature
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Hash)]
 pub struct RSASignature {
-    s: Integer,
+    /// Raw signature in integer form
+    pub s: Integer,
 }
 
-// Rich representation of an RSA signature with the associated public key.
+/// Rich representation of an RSA signature with the associated public key.
 pub struct RichRSASignature<'pk> {
     signature: RSASignature,
     public_key: &'pk RSAPublicKey,

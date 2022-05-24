@@ -1,31 +1,40 @@
 use rug::Integer;
 use scicrypt_numbertheory::{gen_coprime, gen_rsa_modulus};
 use scicrypt_traits::cryptosystems::AsymmetricCryptosystem;
+use scicrypt_traits::cryptosystems::EncryptRaw;
 use scicrypt_traits::randomness::GeneralRng;
 use scicrypt_traits::randomness::SecureRng;
 use scicrypt_traits::security::BitsOfSecurity;
 use scicrypt_traits::Enrichable;
 use std::ops::{Add, Mul, Rem};
+use serde::{Serialize, Deserialize};
 
 /// The Paillier cryptosystem.
 pub struct Paillier;
 
 /// Public key for the Paillier cryptosystem.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct PaillierPublicKey {
-    n: Integer,
-    g: Integer,
+    /// Public modulus n
+    pub n: Integer,
+
+    /// Public group g
+    pub g: Integer,
 }
 
 /// Ciphertext of the Paillier cryptosystem, which is additively homomorphic.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Hash)]
 pub struct PaillierCiphertext {
-    c: Integer,
+    /// Raw Ciphertext in Integer form
+    pub c: Integer,
 }
 
 /// A struct holding both a ciphertext and a reference to its associated public key, which is
 /// useful for decrypting directly using the secret key or performing homomorphic operations.
+#[derive(Clone)]
 pub struct RichPaillierCiphertext<'pk> {
     /// The ciphertext to operate on
-    ciphertext: PaillierCiphertext,
+    pub ciphertext: PaillierCiphertext,
     /// Reference to the associated public key
     public_key: &'pk PaillierPublicKey,
 }
@@ -151,6 +160,30 @@ impl<'pk> Add for &RichPaillierCiphertext<'pk> {
         }
     }
 }
+impl EncryptRaw<'_> for Paillier {
+    type Plaintext = Integer;
+    type Ciphertext = PaillierCiphertext;
+    type RichCiphertext<'pk> = RichPaillierCiphertext<'pk>;
+
+    type PublicKey = PaillierPublicKey;
+    type SecretKey = (Integer, Integer);
+
+    fn encrypt_raw(
+        plaintext: &Self::Plaintext,
+        public_key: &Self::PublicKey,
+        r: Integer,
+    ) -> Self::Ciphertext {
+        let n_squared = Integer::from(public_key.n.square_ref());
+        //let r = Integer::from(*r);
+
+        let first = Integer::from(public_key.g.pow_mod_ref(plaintext, &n_squared).unwrap());
+        let second = r.secure_pow_mod(&public_key.n, &n_squared);
+
+        PaillierCiphertext {
+            c: (first * second).rem(&n_squared),
+        }
+    }
+}
 
 impl<'pk> Mul<&Integer> for &RichPaillierCiphertext<'pk> {
     type Output = RichPaillierCiphertext<'pk>;
@@ -176,6 +209,7 @@ mod tests {
     use scicrypt_traits::randomness::GeneralRng;
     use scicrypt_traits::security::BitsOfSecurity;
     use scicrypt_traits::Enrichable;
+    use crate::cryptosystems::paillier::PaillierCiphertext;
 
     #[test]
     fn test_encrypt_decrypt() {
@@ -215,6 +249,24 @@ mod tests {
         assert_eq!(
             Integer::from(144),
             Paillier::decrypt(&ciphertext_twice, &sk)
+        );
+    }
+    #[test]
+    fn test_homomorphic_subtract() {
+        let mut rng = GeneralRng::new(OsRng);
+
+        let (pk, sk) = Paillier::generate_keys(&BitsOfSecurity::Other { pk_bits: 160 }, &mut rng);
+
+        let ciphertext = Paillier::encrypt(&Integer::from(10), &pk, &mut rng).enrich(&pk);
+        let ciphertext2 = Paillier::encrypt(&Integer::from(3), &pk, &mut rng).enrich(&pk);
+
+        let n_squared = Integer::from(pk.n.square_ref());
+        let invert = PaillierCiphertext {c: ciphertext2.ciphertext.c.invert(&n_squared).unwrap()};
+        let ciphertext_subtract = &ciphertext + &invert.enrich(&pk);
+
+        assert_eq!(
+            Integer::from(7),
+            Paillier::decrypt(&ciphertext_subtract, &sk)
         );
     }
 }
