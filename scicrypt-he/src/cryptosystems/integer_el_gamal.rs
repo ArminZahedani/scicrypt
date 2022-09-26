@@ -155,7 +155,8 @@ impl EncryptionKey for IntegerElGamalPK {
         randomness: &Self::Randomness,
     ) -> Self::Ciphertext {
         IntegerElGamalCiphertext {
-            c1: Integer::from(Integer::from(4).secure_pow_mod_ref(randomness, &self.modulus)),
+            c1: ciphertext.c1
+                * &Integer::from(Integer::from(4).secure_pow_mod_ref(randomness, &self.modulus)),
             c2: (ciphertext.c2
                 * Integer::from(self.h.secure_pow_mod_ref(randomness, &self.modulus)))
             .rem(&self.modulus),
@@ -234,7 +235,9 @@ mod tests {
     use crate::cryptosystems::integer_el_gamal::IntegerElGamal;
     use rand_core::OsRng;
     use rug::Integer;
-    use scicrypt_traits::cryptosystems::{AsymmetricCryptosystem, DecryptionKey, EncryptionKey};
+    use scicrypt_traits::cryptosystems::{
+        Associable, AsymmetricCryptosystem, DecryptionKey, EncryptionKey,
+    };
     use scicrypt_traits::randomness::GeneralRng;
 
     #[test]
@@ -286,5 +289,23 @@ mod tests {
         let ciphertext_twice = ciphertext.pow(&Integer::from(4));
 
         assert_eq!(6561, sk.decrypt(&ciphertext_twice));
+    }
+
+    #[test]
+    fn randomize() {
+        let mut rng = GeneralRng::new(OsRng);
+
+        let el_gamal = IntegerElGamal::setup(&Default::default());
+        let (pk, sk) = el_gamal.generate_keys(&mut rng);
+
+        let ciphertext = pk.encrypt_raw(&Integer::from(15u64), &mut rng);
+        let ciphertext_randomized = pk.randomize(ciphertext.clone(), &mut rng);
+
+        assert_ne!(ciphertext, ciphertext_randomized);
+
+        assert_eq!(
+            Integer::from(15u64),
+            sk.decrypt(&ciphertext_randomized.associate(&pk))
+        );
     }
 }

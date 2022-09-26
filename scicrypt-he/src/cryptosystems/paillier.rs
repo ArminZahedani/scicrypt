@@ -233,7 +233,9 @@ mod tests {
     use crate::cryptosystems::paillier::Paillier;
     use rand_core::OsRng;
     use rug::Integer;
-    use scicrypt_traits::cryptosystems::{AsymmetricCryptosystem, DecryptionKey, EncryptionKey};
+    use scicrypt_traits::cryptosystems::{
+        Associable, AsymmetricCryptosystem, DecryptionKey, EncryptionKey,
+    };
     use scicrypt_traits::randomness::GeneralRng;
     use scicrypt_traits::security::BitsOfSecurity;
 
@@ -326,5 +328,23 @@ mod tests {
         let ciphertext_res = &ciphertext - &Integer::from(5);
 
         assert_eq!(Integer::from(2), sk.decrypt(&ciphertext_res));
+    }
+
+    #[test]
+    fn test_randomize() {
+        let mut rng = GeneralRng::new(OsRng);
+
+        let paillier = Paillier::setup(&BitsOfSecurity::ToyParameters);
+        let (pk, sk) = paillier.generate_keys(&mut rng);
+
+        let ciphertext = pk.encrypt_raw(&Integer::from(21), &mut rng);
+        let ciphertext_randomized = pk.randomize(ciphertext.clone(), &mut rng);
+
+        assert_ne!(ciphertext, ciphertext_randomized);
+
+        assert_eq!(
+            Integer::from(21),
+            sk.decrypt(&ciphertext_randomized.associate(&pk))
+        );
     }
 }
