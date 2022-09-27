@@ -40,6 +40,7 @@ pub struct PaillierPK {
     pub g: Integer,
 }
 /// Decryption key for the Paillier cryptosystem.
+#[derive(Serialize, Deserialize, Clone)]
 pub struct PaillierSK {
     lambda: Integer,
     mu: Integer,

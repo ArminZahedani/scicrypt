@@ -38,6 +38,7 @@ pub struct CurveElGamalPK {
 }
 
 /// Decryption key for curve-based ElGamal
+#[derive(Serialize, Deserialize, Clone)]
 pub struct CurveElGamalSK {
     key: Scalar,
 }

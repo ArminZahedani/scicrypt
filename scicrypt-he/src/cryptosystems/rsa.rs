@@ -26,6 +26,7 @@ pub struct RsaPK {
 }
 
 /// Decryption key for RSA
+#[derive(Serialize, Deserialize, Clone)]
 pub struct RsaSK {
     d: Integer,
 }
