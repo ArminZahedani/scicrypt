@@ -14,7 +14,7 @@
 //! ```
 
 use rug::Integer;
-use scicrypt_numbertheory::{gen_coprime, gen_rsa_modulus};
+use scicrypt_numbertheory::gen_rsa_modulus;
 use scicrypt_traits::cryptosystems::{
     Associable, AsymmetricCryptosystem, DecryptionKey, EncryptionKey,
 };
@@ -36,8 +36,8 @@ pub struct Paillier {
 pub struct PaillierPK {
     /// Public modulus n for encryption
     pub n: Integer,
-    /// Public generator g for encryption
-    pub g: Integer,
+    /// Public modulus n squared (i.e. n^2)
+    pub n_squared: Integer,
 }
 /// Decryption key for the Paillier cryptosystem.
 #[derive(Serialize, Deserialize, Clone)]
@@ -79,10 +79,11 @@ impl AsymmetricCryptosystem for Paillier {
     fn generate_keys<R: SecureRng>(&self, rng: &mut GeneralRng<R>) -> (PaillierPK, PaillierSK) {
         let (n, lambda) = gen_rsa_modulus(self.modulus_size, rng);
 
-        let g = &n + Integer::from(1);
         let mu = Integer::from(lambda.invert_ref(&n).unwrap());
 
-        (PaillierPK { n, g }, PaillierSK { lambda, mu })
+        let n_squared = Integer::from(n.square_ref());
+
+        (PaillierPK { n, n_squared }, PaillierSK { lambda, mu })
     }
 }
 
@@ -93,9 +94,8 @@ impl EncryptionKey for PaillierPK {
     type Randomness = Integer;
 
     fn encrypt_without_randomness(&self, plaintext: &Self::Plaintext) -> Self::Ciphertext {
-        let n_squared = Integer::from(self.n.square_ref());
         PaillierCiphertext {
-            c: Integer::from(self.g.pow_mod_ref(&plaintext.into(), &n_squared).unwrap()),
+            c: ((Integer::from(plaintext) * &self.n) + 1) % &self.n_squared,
         }
     }
 
@@ -104,8 +104,7 @@ impl EncryptionKey for PaillierPK {
         ciphertext: Self::Ciphertext,
         rng: &mut GeneralRng<R>,
     ) -> Self::Ciphertext {
-        let n_squared = Integer::from(self.n.square_ref());
-        let r = gen_coprime(&n_squared, rng);
+        let r = Integer::from(Integer::random_below_ref(&self.n, &mut rng.rug_rng()));
 
         self.randomize_with(ciphertext, &r)
     }
@@ -115,11 +114,12 @@ impl EncryptionKey for PaillierPK {
         ciphertext: Self::Ciphertext,
         randomness: &Self::Randomness,
     ) -> Self::Ciphertext {
-        let n_squared = Integer::from(self.n.square_ref());
-        let randomizer = randomness.to_owned().secure_pow_mod(&self.n, &n_squared);
+        let randomizer = randomness
+            .to_owned()
+            .secure_pow_mod(&self.n, &self.n_squared);
 
         PaillierCiphertext {
-            c: Integer::from(&ciphertext.c * &randomizer).rem(n_squared),
+            c: Integer::from(&ciphertext.c * &randomizer).rem(&self.n_squared),
         }
     }
 }
@@ -200,10 +200,9 @@ impl HomomorphicAddition for PaillierPK {
         ciphertext: &Self::Ciphertext,
         constant: &Self::Plaintext,
     ) -> Self::Ciphertext {
-        let modulus = Integer::from(self.n.square_ref());
         PaillierCiphertext {
             c: Integer::from(
-                &ciphertext.c * &Integer::from(self.g.pow_mod_ref(constant, &modulus).unwrap()),
+                &ciphertext.c * &(((Integer::from(constant) * &self.n) + 1) % &self.n_squared),
             )
             .rem(Integer::from(self.n.square_ref())),
         }
@@ -214,15 +213,9 @@ impl HomomorphicAddition for PaillierPK {
         ciphertext: &Self::Ciphertext,
         constant: &Self::Plaintext,
     ) -> Self::Ciphertext {
-        let modulus = Integer::from(self.n.square_ref());
         PaillierCiphertext {
             c: Integer::from(
-                &ciphertext.c
-                    * &Integer::from(
-                        self.g
-                            .pow_mod_ref(&Integer::from(-constant), &modulus)
-                            .unwrap(),
-                    ),
+                &ciphertext.c * &(((Integer::from(-constant) * &self.n) + 1) % &self.n_squared),
             )
             .rem(Integer::from(self.n.square_ref())),
         }
